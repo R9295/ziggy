@@ -134,7 +134,43 @@ impl Fuzz {
         let mut last_synced_queue_id: u32 = 0;
         let mut last_sync_time = Instant::now();
         let mut afl_output_ok = false;
-
+        let fuzzer_sync_dir = match self.honggfuzz() {
+            true => PathBuf::from(self.output_target()).join("queue"),
+            false => PathBuf::from(self.output_target()).join("corpus"),
+        };
+        if self.coverage_worker {
+        // build coverage the runner
+        Cover::build_runner()?;
+        let workspace_root = cargo_metadata::MetadataCommand::new()
+            .exec()
+            .unwrap()
+            .workspace_root
+            .to_string();
+        // start the coverage worker
+        let coverage_interval = self.coverage_interval;
+        let target = self.target.clone();
+        let global_corpus = fuzzer_sync_dir.clone();
+        let cov_worker_thread = thread::spawn(move || {
+            let mut inputs = vec![];
+            loop {
+                thread::sleep(Duration::from_secs(coverage_interval));
+                // find new inputs
+                for entry in std::fs::read_dir(&global_corpus).unwrap() {
+                    let entry = entry.unwrap().path();
+                    if !inputs.contains(&entry) {
+                        process::Command::new(format!("./target/coverage/debug/{}", &target))
+                            .arg(format!("{}", entry.display()))
+                            .spawn()
+                            .unwrap()
+                            .wait_with_output()
+                            .unwrap();
+                    }
+                    inputs.push(entry);
+                }
+                Cover::run_grcov(&target, "html", "coverage", &workspace_root).unwrap();
+            }
+        });
+        }
         loop {
             let sleep_duration = Duration::from_secs(1);
             thread::sleep(sleep_duration);
@@ -202,11 +238,7 @@ impl Fuzz {
                 for file in afl_corpus {
                     if let Some((file_id, file_name)) = extract_file_id(&file) {
                         if file_id > last_synced_queue_id {
-                            let copy_destination = match self.honggfuzz() {
-                                true => format!("{}/queue/{file_name}", self.output_target()),
-                                false => format!("{}/corpus/{file_name}", self.output_target()),
-                            };
-                            let _ = fs::copy(&file, copy_destination);
+                            let _ = fs::copy(&file, fuzzer_sync_dir.join(&file));
                             last_synced_queue_id = file_id;
                         }
                     }
@@ -223,6 +255,7 @@ impl Fuzz {
                 return Ok(());
             }
         }
+/*         cov_worker_thread.join().unwrap(); */
     }
 
     // Spawns new fuzzers

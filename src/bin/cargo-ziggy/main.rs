@@ -158,6 +158,14 @@ pub struct Fuzz {
     /// AFL++ configuration
     #[clap(short = 'C', long, default_value = "generic")]
     config: FuzzingConfig,
+
+    /// With a coverage worker
+    #[clap(short, long)]
+    coverage_worker: bool,
+
+    /// Coverage generation interval in minutes
+    #[clap(short, long)]
+    coverage_interval: u64,
 }
 
 #[derive(Args)]
