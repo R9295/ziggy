@@ -8,6 +8,7 @@ mod fuzz;
 mod minimize;
 mod plot;
 mod run;
+mod standalone;
 mod triage;
 
 #[cfg(feature = "cli")]
@@ -84,6 +85,9 @@ pub enum Ziggy {
 
     /// Triage crashes found with casr - currently only works for AFL++
     Triage(Triage),
+
+    /// Use Ziggy standalone to orchestrate fuzzing for a AFL++ instrumented binary
+    Standalone(Standalone),
 }
 
 #[derive(Args)]
@@ -99,6 +103,59 @@ pub struct Build {
     /// Compile in release mode (--release)
     #[clap(long = "release", action)]
     release: bool,
+}
+
+#[derive(Args)]
+pub struct Standalone {
+    /// Target to fuzz
+    #[clap(value_name = "TARGET")]
+    target: String,
+
+    /// Fuzzers output directory
+    #[clap(
+        short, long, env = "ZIGGY_OUTPUT", value_parser, value_name = "DIR", default_value = DEFAULT_OUTPUT_DIR
+    )]
+    ziggy_output: PathBuf,
+
+    /// Number of concurent fuzzing jobs
+    #[clap(short, long, value_name = "NUM", default_value_t = 1)]
+    jobs: u32,
+
+    /// Timeout for a single run
+    #[clap(short, long, value_name = "SECS")]
+    timeout: Option<u32>,
+
+    /// AFL++ configuration
+    #[clap(short = 'C', long, default_value = "generic")]
+    config: FuzzingConfig,
+
+    /// Maximum length of input
+    #[clap(short = 'G', long = "maxlength", default_value_t = 1048576)]
+    max_length: u64,
+
+    /// Minimum length of input (AFL++ only)
+    #[clap(short = 'g', long = "minlength", default_value_t = 1)]
+    min_length: u64,
+
+    /// Pass flags to AFL++ directly
+    #[clap(short, long)]
+    afl_flags: Vec<String>,
+
+    /// Dictionary file (format:<http://llvm.org/docs/LibFuzzer.html#dictionaries>)
+    #[clap(short = 'x', long = "dict", value_name = "FILE")]
+    dictionary: Option<PathBuf>,
+
+    // This value helps us create a global timer for our display
+    #[clap(skip = std::time::Instant::now())]
+    start_time: std::time::Instant,
+
+    /// Initial corpus directory (will only be read)
+    #[clap(short, long, value_parser, value_name = "DIR")]
+    initial_corpus: Option<PathBuf>,
+
+    /// Shared corpus directory
+    #[clap(short, long, value_parser, value_name = "DIR", default_value = DEFAULT_CORPUS_DIR)]
+    corpus: PathBuf,
 }
 
 #[derive(Args)]
@@ -338,6 +395,7 @@ fn main() -> Result<(), anyhow::Error> {
         Ziggy::Triage(mut args) => args
             .triage()
             .context("Triaging with casr failed, try \"cargo install casr\""),
+        Ziggy::Standalone(mut args) => args.fuzz_standalone().context("Failure running fuzzers"),
     }
 }
 
