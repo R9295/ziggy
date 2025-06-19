@@ -37,7 +37,7 @@ impl Build {
             let opt_level = env::var("AFL_OPT_LEVEL").unwrap_or("0".to_string());
             let mut rust_flags = env::var("RUSTFLAGS").unwrap_or_default();
             let mut rust_doc_flags = env::var("RUSTDOCFLAGS").unwrap_or_default();
-
+            rust_flags.push_str(" -Cdebug-assertions");
             // First fuzzer we build: AFL++
             let run = process::Command::new(cargo.clone())
                 .args(&afl_args)
@@ -101,19 +101,17 @@ impl Build {
             );
             eprintln!("    {} honggfuzz", style("Building").red().bold());
 
-            let mut hfuzz_args = vec!["hfuzz", "build"];
+            let hfuzz_args = vec!["hfuzz", "build"];
 
-            // Add the --release argument if self.release is true
-            if self.release {
-                hfuzz_args.push("--release");
-            }
+            let mut rust_flags = env::var("RUSTFLAGS").unwrap_or_default();
+            rust_flags.push_str(" -Cdebug-assertions");
 
             // Second fuzzer we build: Honggfuzz
             let run = process::Command::new(cargo)
                 .args(hfuzz_args)
                 .env("CARGO_TARGET_DIR", "./target/honggfuzz")
                 .env("HFUZZ_BUILD_ARGS", "--features=ziggy/honggfuzz")
-                .env("RUSTFLAGS", env::var("RUSTFLAGS").unwrap_or_default())
+                .env("RUSTFLAGS", rust_flags)
                 .stdout(process::Stdio::piped())
                 .spawn()?
                 .wait()
