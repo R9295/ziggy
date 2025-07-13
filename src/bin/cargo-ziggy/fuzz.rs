@@ -51,7 +51,11 @@ impl Fuzz {
     }
 
     pub fn output_target(&self) -> String {
-        format!("{}/{}", self.ziggy_output.display(), self.target)
+        if self.fuzz_binary() {
+            format!("{}/{}", self.ziggy_output.display(), self.target)
+        } else {
+            format!("{}/{}", self.ziggy_output.display(), self.target.split('/').last().expect("invariant; should never occur"))
+        }
     }
 
     /// Returns true if AFL++ is enabled
